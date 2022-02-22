@@ -1,0 +1,65 @@
+###################### TAREFA 4 ###############################
+###############################################################
+
+# carregando os pacotes
+library(terra)
+library(spData)
+library(spDataLarge)
+
+# instalação geobr
+devtools::install_github("ipeaGIT/geobr", subdir = "r-package")
+library(geobr)
+
+# importação dos dados, arquivo .tif de cobertura vegetal
+raster_filepath = system.file("brasil_coverage_2020.tif", package = "spDataLarge")
+my_rast = rast(file.path("brasil_coverage_2020.tif"))
+plot(my_rast)
+multi_raster_file = system.file("brasil_coverage_2020.tif", package = "spDataLarge")
+
+# arquivos de municipalidades
+mun = read_municipality(year =2020)
+rj_mun = mun %>% 
+  filter(abbrev_state == "RJ")
+
+# crop and masks
+cr = crop(my_rast, rj_mun)
+ms = mask(cr, vect(rj_mun))
+rj_sv = vect(rj_mun)
+plot(ms)
+
+# aplicando extract no mask correspondente a RJ
+rj_extr = terra::extract(ms ,rj_sv)
+
+# somando o nº total de pixels por ID
+pixels_mun = rj_extr %>%
+  group_by(ID) %>% 
+  summarise(n_pixels = n())
+
+# somando o nº de pixels correspondentes a cobertura florestal
+# baseando-se no código de cobertura do MAPBIOMAS
+forest_mun = rj_extr %>%
+  group_by(ID) %>% 
+  filter(brasil_coverage_2020 %in% c(3,4,5,49)) %>% 
+  summarise(n_forest = n())
+
+# reunindo as duas colunas no dataframe original
+rj_mun = rj_mun %>%
+  mutate(ID=1:92) %>%
+  left_join(pixels_mun, by = "ID")
+
+rj_mun = rj_mun %>%
+  mutate(ID=1:92) %>%
+  left_join(forest_mun, by = "ID")
+
+# cálculo da estatística 'cobertura' a partir da razão dos dados anteriores
+rj_mun = rj_mun %>%
+  mutate(cobertura = n_forest/n_pixels)
+
+# plotando o mapa
+library(ggplot2)
+ggplot(rj_mun) +
+  geom_sf(aes(fill = cobertura))
+
+
+######################################################
+######################################################
